@@ -8,6 +8,7 @@ from dateutil.relativedelta import relativedelta
 
 CIK_List = ['0001678124', '0001736510', '0001842754', '0001736035', '0001061630']
 
+pd.options.display.float_format = '{:.0f}'.format
 
 # Function to get the previous month last dat from the current date.
 def get_previous_month_last_date(specific_date):
@@ -37,7 +38,7 @@ def getFilings(cik):
         'Sec-Fetch-Dest':'empty',
         'Sec-Fetch-Mode':'cors',
         'Sec-Fetch-Site':'same-site',
-        'User-Agent':'ashok_jj@hotmail.com'
+        'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
     }
     resp2 = requests.get(f'https://data.sec.gov/submissions/CIK{cik}.json', headers=header) # sending a get request to search the cik
     if resp2.status_code == 200: # Checking the response status code. if status code = 200 it means data is available for that CIK.
@@ -52,6 +53,7 @@ def getFilings(cik):
         df['reportDate'] = data['reportDate']
         df['cik'] = resp2.json()['cik']
         df['short name'] = resp2.json()['name']
+        
         df = df[df['form type']=='NPORT-P'] # Filtering the dataFrame for NPORT-P
         df = df[df['filingDate'] >= '2019-01-01'] # Filtering the dataFrame for date grater than 2019-01-01
         tablerows = json.loads(df.to_json(orient='records')) # Converting the filtered dataFrame into json object.
@@ -75,7 +77,7 @@ def getFileData(searchCik, accessionNumber, primaryDocument):
         'Sec-Fetch-Mode':'navigate',
         'Sec-Fetch-Site':'same-origin',
         'Upgrade-Insecure-Requests':'1',
-        'User-Agent':'ashok_jj@hotmail.com'
+        'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
     }
     resp3 = requests.get(f'https://www.sec.gov/Archives/edgar/data/{searchCik}/{accessionNumber}/{primaryDocument}', headers=header)
     soup = BeautifulSoup(resp3.content, 'lxml')  # Creating a BeautifulSoup object
@@ -93,8 +95,8 @@ for cik in CIK_List: #Looping through the CIK list
         searchCik = tablerow['cik']
         tr = getFileData(searchCik, accessionNumber, primaryDocument)  # getting all the tables rows from the xml.
         EndDate = ''
-        RefYear = ''
-        RefMonth = ''
+        PeriodYear = ''
+        PeriodMonth = ''
         TotalAssets = ''
         TotalLiabilities = ''
         NetAssets = ''
@@ -108,14 +110,15 @@ for cik in CIK_List: #Looping through the CIK list
                 heading_text = i.find('td',{'class':'label'}).text
                 if 'Date as of which information is reported.' in heading_text:
                     EndDate = i.find('div',{'class':'fakeBox2'}).text.strip()
-                    RefYear = EndDate.split('-')[0]
-                    RefMonth = EndDate.split('-')[1]
+                    PeriodYear = EndDate.split('-')[0]
+                    PeriodMonth = EndDate.split('-')[1]
                 elif 'Total assets, including assets attributable to miscellaneous securities reported in Part D' in heading_text:
                     TotalAssets = i.find_all('td')[-1].text.strip()
                 elif 'Total liabilities.' in heading_text:
                     TotalLiabilities = i.find_all('td')[-1].text.strip()
                 elif 'Net assets.' in heading_text:
                     NetAssets = i.find_all('td')[-1].text.strip()
+    
         # Again Looping through all the table rows and getting the Subs Reinvest and Reds and appending into a list.
         for i in tr:
             if i.find('td',{'class':'label'}):
@@ -130,23 +133,23 @@ for cik in CIK_List: #Looping through the CIK list
         # Loop for formatting the Captured data into the desired excel format
         for i in range(1,4):
             row = {}
-            row['id'] = id
-            row['CIK'] = int(cik)
+            # row['id'] = id
+            row['CIK'] = cik
             row['shortName'] = tablerow['short name']
             if i==1:
                 row['EndDate'] = EndDate
-                row['RefYear'] = int(RefYear)
-                row['RefMonth'] = int(RefMonth)
+                row['PeriodYear'] = int(PeriodYear)
+                row['PeriodMonth'] = int(PeriodMonth)
                 row['QuarterlySubs'] = float(Subs[0])+float(Subs[1])+float(Subs[2]) # Calculating the QuarterlySubs
                 row['QuarterlyReds'] = float(Reds[0])+float(Reds[1])+float(Reds[2]) # Calculating the QuarterlyReds
                 row['QuarterlyFlow'] = row['QuarterlySubs'] - row['QuarterlyReds'] # Calculating the QuarterlyFlow
             else:
                 EndDate = get_previous_month_last_date(EndDate)
-                RefYear = EndDate.split('-')[0]
-                RefMonth = EndDate.split('-')[1]
+                PeriodYear = EndDate.split('-')[0]
+                PeriodMonth = EndDate.split('-')[1]
                 row['EndDate'] = EndDate
-                row['RefYear'] = int(RefYear)
-                row['RefMonth'] = int(RefMonth)
+                row['PeriodYear'] = int(PeriodYear)
+                row['PeriodMonth'] = int(PeriodMonth)
                 row['QuarterlySubs'] = ''
                 row['QuarterlyReds'] = ''
                 row['QuarterlyFlow'] = ''
@@ -160,10 +163,9 @@ for cik in CIK_List: #Looping through the CIK list
             rows.append(row)
             print(row)
         id = id+1
+    
 
 
 df = pd.DataFrame(rows)
-df = df[['id', 'CIK', 'shortName', 'EndDate', 'RefYear', 'RefMonth', 'TotalAssets', 'TotalLiabilities', 'NetAssets', 'Subs', 'Reds', 'ReInvest', 'QuarterlySubs', 'QuarterlyReds', 'QuarterlyFlow']]
+df = df[['CIK', 'shortName', 'EndDate', 'PeriodYear', 'PeriodMonth', 'TotalAssets', 'TotalLiabilities', 'NetAssets', 'Subs', 'Reds', 'ReInvest', 'QuarterlySubs', 'QuarterlyReds', 'QuarterlyFlow']]
 df.to_excel('output.xlsx', index=False)
-
-display(df)
